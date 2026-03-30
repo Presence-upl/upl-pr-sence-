@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>UPL - Smart Presence Secure</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        :root { --blue-upl: #1a4fa0; --grey-upl: #6c757d; --bg: #f4f6f9; --red: #e74c3c; --green: #27ae60; }
+        body { font-family: 'Roboto', sans-serif; background: var(--bg); margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 15px; box-sizing: border-box; }
+        
+        /* Design de la carte principale */
+        .card { background: white; width: 100%; max-width: 450px; padding: 35px; border-radius: 40px; box-shadow: 0 15px 40px rgba(0,0,0,0.06); text-align: center; border: 1px solid #eee; }
+        
+        /* Logo parfaitement rond comme demandé */
+        .upl-logo { width: 100px; height: 100px; margin: 0 auto 25px; display: block; border-radius: 50%; object-fit: cover; border: 3px solid var(--blue-upl); padding: 5px; background: white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        
+        h2 { font-size: 21px; font-weight: 700; margin-bottom: 25px; color: #333; }
+        
+        /* Groupes de saisie stylisés */
+        .input-group { position: relative; margin-bottom: 18px; text-align: left; }
+        .input-group label { position: absolute; top: -10px; left: 16px; background: white; padding: 0 6px; font-size: 11px; color: var(--blue-upl); font-weight: 700; z-index: 2; }
+        
+        .input-group input, .input-group select { width: 100%; padding: 15px 18px; border: 1.5px solid #e5e7eb; border-radius: 12px; font-size: 14px; box-sizing: border-box; outline: none; background: #fafafa; transition: border-color 0.2s; }
+        .input-group input:focus { border-color: var(--blue-upl); background: white; }
+
+        /* Boutons avec arrondis modérés */
+        .btn { width: 100%; padding: 16px; border-radius: 12px; border: none; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 12px; font-size: 15px; transition: all 0.2s ease; transform: scale(1); border: 1px solid transparent; }
+        .btn:active { transform: scale(0.98); }
+        
+        .btn-blue { background: var(--blue-upl); color: white; border-color: #1a4282; box-shadow: 0 4px 10px rgba(26, 79, 160, 0.2); }
+        .btn-green { background: var(--green); color: white; border-color: #219150; }
+        .btn-red { background: var(--red); color: white; border-color: #c0392b; }
+        .btn-grey { background: var(--grey-upl); color: white; border-color: #5d666e; }
+        
+        .hidden { display: none; }
+        #reader { width: 100%; border-radius: 20px; overflow: hidden; margin-bottom: 15px; border: 2px dashed #ddd; }
+        
+        #list-presence { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        #list-presence td { border-bottom: 1px solid #f2f2f2; padding: 12px; text-align: left; font-size: 13px; color: #444; }
+        
+        #qrcode { display: inline-block; padding: 12px; background: white; border-radius: 15px; border: 1px solid #eee; margin: 15px 0; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <img src="logo.png" alt="UPL Logo" class="upl-logo">
+
+    <div id="view-home">
+        <h2>Plateforme Académique UPL</h2>
+        <button class="btn btn-blue" onclick="showView('view-stu-login')"><i class="fas fa-user-graduate"></i> Je suis Étudiant</button>
+        <button class="btn btn-grey" onclick="showView('view-prof-login')"><i class="fas fa-chalkboard-teacher"></i> Je suis Enseignant</button>
+    </div>
+
+    <div id="view-prof-login" class="hidden">
+        <h2>Lancer une Session</h2>
+        <div class="input-group"><label>Nom du Cours *</label><input type="text" id="p-cours" placeholder="Ex: Informatique"></div>
+        <div class="input-group">
+            <label>Promotion cible</label>
+            <select id="p-class">
+                <option value="Bac 1 Technologie (IA, GL, SI)">Bac 1 Technologie (IA, GL, SI)</option>
+                <option value="Bac 1 IGAE">Bac 1 IGAE</option>
+                <option value="Bac 3 GL/IA">Bac 3 GL/IA</option>
+                <option value="Bac 3 SI">Bac 3 SI</option>
+                <option value="Bac 3 IAGE">Bac 3 IAGE</option>
+                <option value="Bac 4 SI">Bac 4 SI</option>
+                <option value="Bac 4 GL">Bac 4 GL</option>
+                <option value="Bac 4 IA">Bac 4 IA</option>
+            </select>
+        </div>
+        <button class="btn btn-blue" onclick="ouvrirSession()">Lancer l'appel</button>
+        <button class="btn btn-grey" onclick="showView('view-home')">Retour</button>
+    </div>
+
+    <div id="view-prof-dash" class="hidden">
+        <h2 id="dash-title">...</h2>
+        <div id="qrcode"></div>
+        <div id="qr-info" style="font-size:11px; color:#666; margin-bottom:15px; line-height:1.5;"></div>
+        <button class="btn btn-green" id="btn-excel" onclick="telechargerExcel()"><i class="fas fa-file-excel"></i> Exporter la liste</button>
+        <table id="list-presence"><tbody id="presence-body"></tbody></table>
+        <button class="btn btn-red" onclick="fermerSession()" style="margin-top:20px;">Clôturer</button>
+    </div>
+
+    <div id="view-stu-login" class="hidden">
+        <h2>Identification</h2>
+        <div class="input-group"><label>Nom Complet *</label><input type="text" id="s-name" placeholder="Ex: Ton Nom"></div>
+        <div class="input-group"><label>Matricule *</label><input type="text" id="s-mat" placeholder="Ex: 24-UPL-000"></div>
+        <div class="input-group">
+            <label>Ma Promotion *</label>
+            <select id="s-class">
+                <option value="Bac 1 Technologie (IA, GL, SI)">Bac 1 Technologie (IA, GL, SI)</option>
+                <option value="Bac 1 IGAE">Bac 1 IGAE</option>
+                <option value="Bac 3 GL/IA">Bac 3 GL/IA</option>
+                <option value="Bac 3 SI">Bac 3 SI</option>
+                <option value="Bac 3 IAGE">Bac 3 IAGE</option>
+                <option value="Bac 4 SI">Bac 4 SI</option>
+                <option value="Bac 4 GL">Bac 4 GL</option>
+                <option value="Bac 4 IA">Bac 4 IA</option>
+            </select>
+        </div>
+        
+        <div id="reader" class="hidden"></div>
+        <button class="btn btn-blue" id="btn-camera" onclick="activerCamera()">Scanner le Code</button>
+        <button class="btn btn-grey" onclick="stopStu()">Annuler</button>
+    </div>
+</div>
+
+<script>
+    // Configuration Firebase
+    const firebaseConfig = {
+        apiKey: "AIzaSyDPWfmUGOHOXA7MECD_DpvrSTrGAKhMW5E",
+        databaseURL: "https://ijc-impact-default-rtdb.firebaseio.com",
+        projectId: "ijc-impact",
+        appId: "1:617988549247:web:8851febad9bcdb416ced4a"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let qrInterval = null;
+    let html5QrScanner = null;
+
+    function showView(id) {
+        document.querySelectorAll('.card > div').forEach(v => v.classList.add('hidden'));
+        document.getElementById(id).classList.remove('hidden');
+    }
+
+    function ouvrirSession() {
+        const cours = document.getElementById('p-cours').value;
+        const promo = document.getElementById('p-class').value;
+        if(!cours) return alert("Nom du cours requis");
+        
+        const now = new Date();
+        const startInfo = `Promo: ${promo}\n${now.toLocaleDateString()} - ${now.toLocaleTimeString()}`;
+        document.getElementById('dash-title').innerText = cours;
+        document.getElementById('qr-info').innerText = startInfo;
+        
+        showView('view-prof-dash');
+        refreshQR(cours, startInfo);
+        // QR Code dynamique : change toutes les 15 secondes
+        qrInterval = setInterval(() => refreshQR(cours, startInfo), 15000);
+
+        db.ref('presences/' + cours).on('value', snap => {
+            const body = document.getElementById('presence-body');
+            body.innerHTML = "";
+            snap.forEach(child => {
+                const s = child.val();
+                body.innerHTML += `<tr><td><b>${s.nom}</b><br><small>${s.promo}</small></td><td style="text-align:right;color:#888">${s.heure}</td></tr>`;
+            });
+        });
+    }
+
+    function refreshQR(cours, startInfo) {
+        const token = "UPL-" + Math.random().toString(36).substr(2, 5).toUpperCase();
+        const fullToken = `DATA|${cours}|${startInfo}|${token}`;
+        document.getElementById('qrcode').innerHTML = "";
+        new QRCode(document.getElementById("qrcode"), { text: fullToken, width: 170, height: 170 });
+        db.ref('active_session').set({ token: fullToken, cours: cours });
+    }
+
+    function telechargerExcel() {
+        const cours = document.getElementById('dash-title').innerText;
+        db.ref('presences/' + cours).once('value', snap => {
+            let data = [];
+            snap.forEach(c => data.push(c.val()));
+            if (data.length === 0) return alert("Liste vide");
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Présences");
+            const wbout = XLSX.write(wb, {bookType:'xlsx', type:'binary'});
+            function s2ab(s) {
+                var buf = new ArrayBuffer(s.length);
+                var view = new Uint8Array(buf);
+                for (var i=0; i<s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+                return buf;
+            }
+            const blob = new Blob([s2ab(wbout)], {type:"application/octet-stream"});
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `UPL_${cours}.xlsx`;
+            a.click();
+        });
+    }
+
+    function activerCamera() {
+        const name = document.getElementById('s-name').value;
+        const mat = document.getElementById('s-mat').value;
+        if(!name || !mat) return alert("Veuillez remplir votre nom et matricule");
+        
+        document.getElementById('reader').classList.remove('hidden');
+        html5QrScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        html5QrScanner.render(onScanSuccess);
+    }
+
+    function onScanSuccess(decodedText) {
+        db.ref('active_session').once('value', snap => {
+            const session = snap.val();
+            if(session && decodedText === session.token) {
+                db.ref('presences/' + session.cours).push({
+                    nom: document.getElementById('s-name').value,
+                    matricule: document.getElementById('s-mat').value,
+                    promo: document.getElementById('s-class').value,
+                    heure: new Date().toLocaleTimeString('fr-FR')
+                });
+                alert("✅ Présence enregistrée avec succès !");
+                stopStu();
+            } else { 
+                alert("❌ Le QR Code est périmé ou incorrect. Attendez le prochain affichage."); 
+            }
+        });
+    }
+
+    function stopStu() {
+        if(html5QrScanner) html5QrScanner.clear();
+        document.getElementById('reader').classList.add('hidden');
+        showView('view-home');
+    }
+
+    function fermerSession() {
+        if(confirm("Clôturer définitivement la session ?")) {
+            clearInterval(qrInterval);
+            db.ref('active_session').remove();
+            location.reload();
+        }
+    }
+</script>
+</body>
+</html>
