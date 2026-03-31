@@ -55,14 +55,9 @@
         <div class="input-group">
             <label>Promotion</label>
             <select id="p-class">
-                <option value="Bac 1 Technologie (IA,GL,SI)">Bac 1 Technologie (IA,GL,SI)</option>
+                <option value="Bac 1 Technologie">Bac 1 Technologie (IA,GL,SI)</option>
                 <option value="Bac 1 IGAE">Bac 1 IGAE</option>
                 <option value="Bac 3 GL/IA">Bac 3 GL/IA</option>
-                <option value="Bac 3 SI">Bac 3 SI</option>
-                <option value="Bac 3 IAGE">Bac 3 IAGE</option>
-                <option value="Bac 4 SI">Bac 4 SI</option>
-                <option value="Bac 4 GL">Bac 4 GL</option>
-                <option value="Bac 4 IA">Bac 4 IA</option>
             </select>
         </div>
         <div class="input-group">
@@ -96,14 +91,8 @@
         <div class="input-group">
             <label>Ma Promotion</label>
             <select id="s-class">
-                <option value="Bac 1 Technologie (IA,GL,SI)">Bac 1 Technologie (IA,GL,SI)</option>
+                <option value="Bac 1 Technologie">Bac 1 Technologie (IA,GL,SI)</option>
                 <option value="Bac 1 IGAE">Bac 1 IGAE</option>
-                <option value="Bac 3 GL/IA">Bac 3 GL/IA</option>
-                <option value="Bac 3 SI">Bac 3 SI</option>
-                <option value="Bac 3 IAGE">Bac 3 IAGE</option>
-                <option value="Bac 4 SI">Bac 4 SI</option>
-                <option value="Bac 4 GL">Bac 4 GL</option>
-                <option value="Bac 4 IA">Bac 4 IA</option>
             </select>
         </div>
         <div id="reader" class="hidden"></div>
@@ -113,7 +102,6 @@
 </div>
 
 <script>
-    // --- TES COORDONNÉES FIREBASE MISES À JOUR ---
     const firebaseConfig = {
         apiKey: "AIzaSyDPWfmUGOHOXA7MECD_DpvrSTrGAKhMW5E",
         authDomain: "ijc-impact.firebaseapp.com",
@@ -124,10 +112,8 @@
         appId: "1:617988549247:web:bb58ab4e478f2daa6ced4a"
     };
 
-    // Initialisation
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-
     let qrInterval = null;
     let html5QrScanner = null;
 
@@ -136,8 +122,8 @@
         document.getElementById(id).classList.remove('hidden');
     }
 
-    function getFingerprint() {
-        return btoa(navigator.userAgent.slice(-30) + screen.width + navigator.language);
+    function getFingerprint() { 
+        return btoa(navigator.userAgent.slice(-30) + screen.width + navigator.language); 
     }
 
     function ouvrirSession() {
@@ -171,14 +157,7 @@
         const token = "UPL-" + Math.random().toString(36).substr(2, 6).toUpperCase();
         document.getElementById('qrcode').innerHTML = "";
         new QRCode(document.getElementById("qrcode"), { text: token, width: 180, height: 180 });
-        
-        db.ref(`active_sessions/${promoId}`).set({
-            token: token,
-            cours: cours,
-            type: type,
-            timestamp: Date.now()
-        });
-        
+        db.ref(`active_session/${promoId}`).set({ token: token, type: type });
         const timer = document.getElementById('timer');
         timer.style.width = "100%";
         setTimeout(() => { timer.style.width = "0%"; }, 100);
@@ -195,68 +174,58 @@
     function onScanSuccess(decodedText) {
         const promo = document.getElementById('s-class').value;
         const promoId = btoa(promo).substr(0, 10);
-        const fingerprint = getFingerprint();
         const matricule = document.getElementById('s-mat').value;
+        const fingerprint = getFingerprint();
 
-        db.ref(`active_sessions/${promoId}`).once('value', snap => {
+        db.ref(`active_session/${promoId}`).once('value', snap => {
             const session = snap.val();
             if(session && decodedText === session.token) {
                 db.ref(`presences/${promoId}`).once('value', pSnap => {
                     let aFaitEntree = false;
-                    let dejaFaitTypeActuel = false;
                     let telUtilise = false;
 
                     pSnap.forEach(c => {
                         const d = c.val();
-                        if(d.matricule === matricule) {
-                            if(d.type === "ENTREE") aFaitEntree = true;
-                            if(d.type === session.type) dejaFaitTypeActuel = true;
-                        }
+                        if(d.matricule === matricule && d.type === "ENTREE") aFaitEntree = true;
                         if(d.device_id === fingerprint && d.type === session.type) telUtilise = true;
                     });
 
                     if(session.type === "SORTIE" && !aFaitEntree) {
-                        alert("❌ Refusé : Vous n'avez pas validé l'ENTRÉE pour ce cours !");
-                        return stopStu();
-                    }
-                    if(dejaFaitTypeActuel) {
-                        alert("⚠️ Vous avez déjà validé votre " + session.type + " !");
+                        alert("❌ Refusé : Vous n'avez pas validé l'ENTRÉE !");
                         return stopStu();
                     }
                     if(telUtilise) {
-                        alert("❌ Fraude : Ce téléphone a déjà servi pour un autre étudiant !");
+                        alert("❌ Fraude : Ce téléphone a déjà servi pour cette session !");
                         return stopStu();
                     }
 
-                    db.ref(`presences/${promoId}`).push({
+                    // Enregistrement UNIQUE (Matricule + Type)
+                    const key = `${matricule.replace(/\W/g, '')}_${session.type}`;
+                    db.ref(`presences/${promoId}/${key}`).set({
                         nom: document.getElementById('s-name').value,
                         matricule: matricule,
                         type: session.type,
                         device_id: fingerprint,
                         heure: new Date().toLocaleTimeString('fr-FR')
+                    }).then(() => {
+                        html5QrScanner.clear().then(() => {
+                            alert("✅ Présence enregistrée !");
+                            stopStu();
+                        });
                     });
-                    alert("✅ Présence " + session.type + " enregistrée !");
-                    stopStu();
                 });
-            } else {
-                alert("❌ QR Code expiré ou mauvaise promotion sélectionnée.");
-            }
+            } else { alert("❌ QR Expire ou mauvaise promotion"); }
         });
     }
 
     function telechargerExcel() {
         const promo = document.getElementById('dash-promo').innerText;
-        const promoId = btoa(promo).substr(0, 10);
-        db.ref(`presences/${promoId}`).once('value', snap => {
+        db.ref(`presences/${btoa(promo).substr(0, 10)}`).once('value', snap => {
             let data = [];
-            snap.forEach(c => {
-                const { device_id, ...clean } = c.val();
-                data.push(clean);
-            });
-            if(data.length === 0) return alert("Liste vide");
+            snap.forEach(c => { const {device_id, ...clean} = c.val(); data.push(clean); });
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Présences");
+            XLSX.utils.book_append_sheet(wb, ws, "Presences");
             XLSX.writeFile(wb, `UPL_${promo}.xlsx`);
         });
     }
@@ -269,11 +238,8 @@
     }
 
     function fermerSession() {
-        if(confirm("Voulez-vous fermer cette session ?")) {
-            const promo = document.getElementById('dash-promo').innerText;
-            const promoId = btoa(promo).substr(0, 10);
-            clearInterval(qrInterval);
-            db.ref(`active_sessions/${promoId}`).remove();
+        if(confirm("Clôturer la session ?")) {
+            db.ref(`active_session/${btoa(document.getElementById('dash-promo').innerText).substr(0, 10)}`).remove();
             location.reload();
         }
     }
