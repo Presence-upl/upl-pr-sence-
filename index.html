@@ -55,9 +55,14 @@
         <div class="input-group">
             <label>Promotion</label>
             <select id="p-class">
-                <option value="Bac 1 Technologie">Bac 1 Technologie (IA,GL,SI)</option>
+                <option value="Bac 1 Technologie (IA,GL, SI)">Bac 1 Technologie (IA,GL, SI)</option>
                 <option value="Bac 1 IGAE">Bac 1 IGAE</option>
                 <option value="Bac 3 GL/IA">Bac 3 GL/IA</option>
+                <option value="Bac 3 SI">Bac 3 SI</option>
+                <option value="Bac 3 IAGE">Bac 3 IAGE</option>
+                <option value="Bac 4 SI">Bac 4 SI</option>
+                <option value="Bac 4 GL">Bac 4 GL</option>
+                <option value="Bac 4 IA">Bac 4 IA</option>
             </select>
         </div>
         <div class="input-group">
@@ -86,13 +91,19 @@
 
     <div id="view-stu-login" class="hidden">
         <h2>Identification Étudiant</h2>
-        <div class="input-group"><label>Nom & Postnom</label><input type="text" id="s-name" placeholder="Ex: Cedrick Lwamba"></div>
-        <div class="input-group"><label>Matricule</label><input type="text" id="s-mat" placeholder="24-UPL-000"></div>
+        <div class="input-group"><label>Nom & Postnom</label><input type="text" id="s-name" placeholder="Ton nom !"></div>
+        <div class="input-group"><label>Matricule</label><input type="text" id="s-mat" placeholder="Ton matricule"></div>
         <div class="input-group">
             <label>Ma Promotion</label>
             <select id="s-class">
-                <option value="Bac 1 Technologie">Bac 1 Technologie (IA,GL,SI)</option>
+                <option value="Bac 1 Technologie (IA,GL, SI)">Bac 1 Technologie (IA,GL, SI)</option>
                 <option value="Bac 1 IGAE">Bac 1 IGAE</option>
+                <option value="Bac 3 GL/IA">Bac 3 GL/IA</option>
+                <option value="Bac 3 SI">Bac 3 SI</option>
+                <option value="Bac 3 IAGE">Bac 3 IAGE</option>
+                <option value="Bac 4 SI">Bac 4 SI</option>
+                <option value="Bac 4 GL">Bac 4 GL</option>
+                <option value="Bac 4 IA">Bac 4 IA</option>
             </select>
         </div>
         <div id="reader" class="hidden"></div>
@@ -123,7 +134,11 @@
     }
 
     function getFingerprint() { 
-        return btoa(navigator.userAgent.slice(-30) + screen.width + navigator.language); 
+        return btoa(navigator.userAgent.slice(-30) + screen.width); 
+    }
+
+    function generatePromoId(promoText) {
+        return btoa(promoText).replace(/=/g, '').substr(0, 12);
     }
 
     function ouvrirSession() {
@@ -132,7 +147,7 @@
         const type = document.getElementById('p-type').value;
         if(!cours) return alert("Nom du cours requis");
 
-        const promoId = btoa(promo).substr(0, 10);
+        const promoId = generatePromoId(promo);
         document.getElementById('dash-title').innerText = cours;
         document.getElementById('dash-promo').innerText = promo;
         const badge = document.getElementById('session-badge');
@@ -140,8 +155,8 @@
         badge.className = `type-badge ${type === 'ENTREE' ? 'badge-in' : 'badge-out'}`;
 
         showView('view-prof-dash');
-        refreshQR(promoId, cours, type);
-        qrInterval = setInterval(() => refreshQR(promoId, cours, type), 15000);
+        refreshQR(promoId, type);
+        qrInterval = setInterval(() => refreshQR(promoId, type), 15000);
 
         db.ref(`presences/${promoId}`).on('value', snap => {
             const body = document.getElementById('presence-body');
@@ -153,7 +168,7 @@
         });
     }
 
-    function refreshQR(promoId, cours, type) {
+    function refreshQR(promoId, type) {
         const token = "UPL-" + Math.random().toString(36).substr(2, 6).toUpperCase();
         document.getElementById('qrcode').innerHTML = "";
         new QRCode(document.getElementById("qrcode"), { text: token, width: 180, height: 180 });
@@ -173,8 +188,8 @@
 
     function onScanSuccess(decodedText) {
         const promo = document.getElementById('s-class').value;
-        const promoId = btoa(promo).substr(0, 10);
-        const matricule = document.getElementById('s-mat').value;
+        const promoId = generatePromoId(promo);
+        const matricule = document.getElementById('s-mat').value.trim();
         const fingerprint = getFingerprint();
 
         db.ref(`active_session/${promoId}`).once('value', snap => {
@@ -191,7 +206,7 @@
                     });
 
                     if(session.type === "SORTIE" && !aFaitEntree) {
-                        alert("❌ Refusé : Vous n'avez pas validé l'ENTRÉE !");
+                        alert("❌ Refusé : Vous n'avez pas validé l'ENTRÉE d'abord !");
                         return stopStu();
                     }
                     if(telUtilise) {
@@ -199,7 +214,6 @@
                         return stopStu();
                     }
 
-                    // Enregistrement UNIQUE (Matricule + Type)
                     const key = `${matricule.replace(/\W/g, '')}_${session.type}`;
                     db.ref(`presences/${promoId}/${key}`).set({
                         nom: document.getElementById('s-name').value,
@@ -214,13 +228,16 @@
                         });
                     });
                 });
-            } else { alert("❌ QR Expire ou mauvaise promotion"); }
+            } else { 
+                alert("❌ QR Code expiré ou mauvaise Promotion !"); 
+                stopStu();
+            }
         });
     }
 
     function telechargerExcel() {
         const promo = document.getElementById('dash-promo').innerText;
-        db.ref(`presences/${btoa(promo).substr(0, 10)}`).once('value', snap => {
+        db.ref(`presences/${generatePromoId(promo)}`).once('value', snap => {
             let data = [];
             snap.forEach(c => { const {device_id, ...clean} = c.val(); data.push(clean); });
             const ws = XLSX.utils.json_to_sheet(data);
@@ -238,8 +255,8 @@
     }
 
     function fermerSession() {
-        if(confirm("Clôturer la session ?")) {
-            db.ref(`active_session/${btoa(document.getElementById('dash-promo').innerText).substr(0, 10)}`).remove();
+        if(confirm("Clôturer ?")) {
+            db.ref(`active_session/${generatePromoId(document.getElementById('dash-promo').innerText)}`).remove();
             location.reload();
         }
     }
