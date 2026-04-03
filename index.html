@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UPL - Smart Presence Secure V3</title>
+    <title>UPL - Smart Presence Secure V3.1</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
@@ -29,7 +29,7 @@
         .btn-red { background: var(--red); color: white; }
         .btn-grey { background: var(--grey-upl); color: white; }
         .hidden { display: none; }
-        #reader { width: 100%; border-radius: 20px; overflow: hidden; margin-bottom: 15px; border: 2px dashed #ddd; background: #000; }
+        #reader { width: 100%; border-radius: 20px; overflow: hidden; margin-bottom: 15px; border: 2px dashed #ddd; background: #000; min-height: 250px; }
         #qrcode { display: inline-block; padding: 10px; background: white; border-radius: 15px; border: 1px solid #eee; margin: 10px 0; }
         .timer-bar { height: 4px; background: var(--blue-upl); width: 100%; margin-top: 5px; border-radius: 2px; transition: width 1s linear; }
         .type-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; font-size: 11px; font-weight: bold; margin-bottom: 10px; }
@@ -51,7 +51,7 @@
 
     <div id="view-prof-login" class="hidden">
         <h2>Démarrer une Session</h2>
-        <div class="input-group"><label>Nom du Cours</label><input type="text" id="p-cours" placeholder="Ex: Algorithmique"></div>
+        <div class="input-group"><label>Nom du Cours</label><input type="text" id="p-cours" placeholder="Ex: PYTHON, Réseaux..."></div>
         <div class="input-group">
             <label>Promotion</label>
             <select id="p-class">
@@ -72,7 +72,7 @@
                 <option value="SORTIE">Présence à la Sortie</option>
             </select>
         </div>
-        <button class="btn btn-blue" onclick="ouvrirSession()">Générer le QR Code</button>
+        <button class="btn btn-blue" onclick="ouvrirSession()">Lancer la Session</button>
         <button class="btn btn-grey" onclick="showView('view-home')">Retour</button>
     </div>
 
@@ -82,7 +82,7 @@
         <p id="dash-promo" style="font-size:12px; color:var(--grey-upl); margin-bottom:10px;"></p>
         <div id="qrcode"></div>
         <div id="timer" class="timer-bar"></div>
-        <button class="btn btn-green" onclick="telechargerExcel()" style="margin-top:15px;"><i class="fas fa-file-excel"></i> Exporter la liste</button>
+        <button class="btn btn-green" onclick="telechargerExcel()" style="margin-top:15px;"><i class="fas fa-file-excel"></i> Exporter</button>
         <div style="max-height: 180px; overflow-y: auto; margin-top: 15px; border: 1px solid #eee; border-radius: 10px;">
             <table id="list-presence" style="width:100%; border-collapse:collapse;"><tbody id="presence-body"></tbody></table>
         </div>
@@ -91,10 +91,10 @@
 
     <div id="view-stu-login" class="hidden">
         <h2>Identification Étudiant</h2>
-        <div class="input-group"><label>Nom & Postnom</label><input type="text" id="s-name" placeholder="Ton nom !"></div>
-        <div class="input-group"><label>Matricule</label><input type="text" id="s-mat" placeholder="Ton matricule"></div>
+        <div class="input-group"><label>Nom & Postnom</label><input type="text" id="s-name" placeholder="Ton nom complet"></div>
+        <div class="input-group"><label>Matricule</label><input type="text" id="s-mat" placeholder="Ex: 2025-XXXX"></div>
         <div class="input-group">
-            <label>Ma Promotion</label>
+            <label>Promotion</label>
             <select id="s-class">
                 <option value="Bac 1 Technologie (IA,GL, SI)">Bac 1 Technologie (IA,GL, SI)</option>
                 <option value="Bac 1 IGAE">Bac 1 IGAE</option>
@@ -134,18 +134,19 @@
     }
 
     function getFingerprint() { 
-        return btoa(navigator.userAgent.slice(-30) + screen.width); 
+        return btoa(navigator.userAgent.slice(-15) + screen.width); 
     }
 
+    // NOUVELLE FONCTION PROMO ID (Robuste sans symboles)
     function generatePromoId(promoText) {
-        return btoa(promoText).replace(/=/g, '').substr(0, 12);
+        return promoText.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substr(0, 15);
     }
 
     function ouvrirSession() {
-        const cours = document.getElementById('p-cours').value;
+        const cours = document.getElementById('p-cours').value.trim();
         const promo = document.getElementById('p-class').value;
         const type = document.getElementById('p-type').value;
-        if(!cours) return alert("Nom du cours requis");
+        if(!cours) return alert("Saisissez le nom du cours !");
 
         const promoId = generatePromoId(promo);
         document.getElementById('dash-title').innerText = cours;
@@ -155,8 +156,8 @@
         badge.className = `type-badge ${type === 'ENTREE' ? 'badge-in' : 'badge-out'}`;
 
         showView('view-prof-dash');
-        refreshQR(promoId, type);
-        qrInterval = setInterval(() => refreshQR(promoId, type), 15000);
+        refreshQR(promoId, type, cours);
+        qrInterval = setInterval(() => refreshQR(promoId, type, cours), 15000);
 
         db.ref(`presences/${promoId}`).on('value', snap => {
             const body = document.getElementById('presence-body');
@@ -168,22 +169,25 @@
         });
     }
 
-    function refreshQR(promoId, type) {
+    function refreshQR(promoId, type, cours) {
         const token = "UPL-" + Math.random().toString(36).substr(2, 6).toUpperCase();
         document.getElementById('qrcode').innerHTML = "";
         new QRCode(document.getElementById("qrcode"), { text: token, width: 180, height: 180 });
-        db.ref(`active_session/${promoId}`).set({ token: token, type: type });
+        db.ref(`active_session/${promoId}`).set({ token: token, type: type, cours: cours, time: Date.now() });
         const timer = document.getElementById('timer');
         timer.style.width = "100%";
         setTimeout(() => { timer.style.width = "0%"; }, 100);
     }
 
+    // SCANNER AMÉLIORÉ (Force la caméra arrière)
     function activerCamera() {
-        if(!document.getElementById('s-name').value || !document.getElementById('s-mat').value) return alert("Veuillez remplir vos informations");
+        if(!document.getElementById('s-name').value || !document.getElementById('s-mat').value) return alert("Remplissez vos infos !");
         document.getElementById('btn-camera').classList.add('hidden');
         document.getElementById('reader').classList.remove('hidden');
-        html5QrScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-        html5QrScanner.render(onScanSuccess);
+        
+        html5QrScanner = new Html5Qrcode("reader");
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        html5QrScanner.start({ facingMode: "environment" }, config, onScanSuccess);
     }
 
     function onScanSuccess(decodedText) {
@@ -196,41 +200,31 @@
             const session = snap.val();
             if(session && decodedText === session.token) {
                 db.ref(`presences/${promoId}`).once('value', pSnap => {
-                    let aFaitEntree = false;
-                    let telUtilise = false;
-
+                    let dejaFait = false;
                     pSnap.forEach(c => {
                         const d = c.val();
-                        if(d.matricule === matricule && d.type === "ENTREE") aFaitEntree = true;
-                        if(d.device_id === fingerprint && d.type === session.type) telUtilise = true;
+                        if((d.matricule === matricule || d.device_id === fingerprint) && d.type === session.type) dejaFait = true;
                     });
 
-                    if(session.type === "SORTIE" && !aFaitEntree) {
-                        alert("❌ Refusé : Vous n'avez pas validé l'ENTRÉE d'abord !");
-                        return stopStu();
-                    }
-                    if(telUtilise) {
-                        alert("❌ Fraude : Ce téléphone a déjà servi pour cette session !");
-                        return stopStu();
-                    }
+                    if(dejaFait) return alert("❌ Déjà enregistré ou fraude détectée !");
 
                     const key = `${matricule.replace(/\W/g, '')}_${session.type}`;
                     db.ref(`presences/${promoId}/${key}`).set({
                         nom: document.getElementById('s-name').value,
                         matricule: matricule,
+                        cours: session.cours,
                         type: session.type,
                         device_id: fingerprint,
                         heure: new Date().toLocaleTimeString('fr-FR')
                     }).then(() => {
-                        html5QrScanner.clear().then(() => {
-                            alert("✅ Présence enregistrée !");
-                            stopStu();
+                        html5QrScanner.stop().then(() => {
+                            alert("✅ Présence validée pour " + session.cours);
+                            location.reload();
                         });
                     });
                 });
             } else { 
                 alert("❌ QR Code expiré ou mauvaise Promotion !"); 
-                stopStu();
             }
         });
     }
@@ -248,14 +242,12 @@
     }
 
     function stopStu() {
-        if(html5QrScanner) html5QrScanner.clear();
-        document.getElementById('reader').classList.add('hidden');
-        document.getElementById('btn-camera').classList.remove('hidden');
-        showView('view-home');
+        if(html5QrScanner) html5QrScanner.stop();
+        location.reload();
     }
 
     function fermerSession() {
-        if(confirm("Clôturer ?")) {
+        if(confirm("Clôturer la session ?")) {
             db.ref(`active_session/${generatePromoId(document.getElementById('dash-promo').innerText)}`).remove();
             location.reload();
         }
